@@ -1,12 +1,12 @@
 """ SAT dataset"""
 
 import os
+from collections.abc import MutableMapping
 from typing import Generator, Self
+
 import pandas as pd
 
 from datatypes import SATSample
-
-from collections.abc import MutableMapping
 
 
 class SATDataset:

@@ -115,8 +115,22 @@ class SATAssignment(Literals, CSVDType):
 
     @classmethod
     def from_str(cls, from_str: str) -> Self:
-        """create an assignment from a comma separated string of literals"""
-        return cls.from_strs(from_str.split(","))
+        """create an assignment from a DIMACS Assignment str"""
+        assignment = []
+        read_zero = False
+        for l in from_str.split("\n"):
+            if not l.startswith("v"):
+                raise ParsingException("New line does not start with v")
+            for v in l.split(" ")[1:]:
+                if v == "0":
+                    read_zero = True
+                    break
+                assignment.append(v)
+            if read_zero:
+                break
+        if read_zero:
+            return cls.from_strs(assignment)
+        raise ParsingException("Assignment string does not end with zero")
 
 
 class CNFFormula(CSVDType):
@@ -156,7 +170,7 @@ class CNFFormula(CSVDType):
         nbclauses = -1
         clauses: list[Clause] = []
         comments: list[str] = []
-        from_str = from_str.rstrip("\n")
+        from_str = from_str.rstrip("\n ")
         for clause_str in from_str.split("\n"):
             if clause_str.startswith("c"):
                 comments.append(clause_str[2:])
@@ -220,7 +234,7 @@ class SATSample(CSVDType):
     def from_fields(cls, **kwargs) -> Self:
         return cls(
             formula=CNFFormula.from_fields(**kwargs),
-            assignment=SATAssignment.from_fields(**kwargs),
+            assignment=SATAssignment.from_fields(**kwargs)
         )
 
     def to_fields(self) -> dict[str, str]:
