@@ -64,6 +64,14 @@ class Literals(metaclass=ABCMeta):
     def __iter__(self) -> Iterator[int]:
         return iter(self.lits)
 
+    def __eq__(self, value: object) -> bool:
+        if isinstance(value, self.__class__):
+            return set(self.lits) == set(value.lits)
+        return False
+
+    def __hash__(self) -> int:
+        return hash(frozenset(self))
+
     def sort(self) -> None:
         """sort the literals according the abstract value"""
         self.lits.sort(key=abs)
@@ -212,6 +220,11 @@ class CNFFormula(CSVDType):
     def __repr__(self) -> str:
         clauses = f"[{", ".join([c.__repr__() for c in self.clauses])}]"
         return f"{self.__class__.__name__}({clauses},{str(self.comments)})"
+
+    def __eq__(self, value: object) -> bool:
+        if isinstance(value, self.__class__):
+            return set(self.clauses) == set(value.clauses)
+        return False
 
 
 class SATSample(CSVDType):
