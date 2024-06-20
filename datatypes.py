@@ -107,8 +107,7 @@ class SATAssignment(Literals, CSVDType):
         return {"assignment": self.to_str()}
 
     def to_str(self) -> str:
-        """return the assignment as comma-separated string of literals"""
-        return ",".join([str(lit) for lit in self.lits])
+        return "v " + " ".join([str(v) for v in self.lits]) + " 0"
 
     def __str__(self) -> str:
         return self.to_str()
