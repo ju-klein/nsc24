@@ -2,21 +2,30 @@
 
 import os
 from collections.abc import MutableMapping
-from typing import Generator, Self
+from typing import Generator
 
 import pandas as pd
 
 from datatypes import SATSample
+#from  torch.utils.data import Dataset
 
 
+#class SATDataset(Dataset):
 class SATDataset:
     """Dataset of SAT Problems"""
 
     def __init__(self, df: pd.DataFrame) -> None:
         self.df = df
 
+    def __len__(self) -> int:
+        return len(self.df)
+
+    def __getitem__(self, i)-> SATSample:
+        """get ith sample with self[i]"""
+        return SATSample.from_fields(**self.df.iloc[i].to_dict())
+
     @classmethod
-    def load(cls, load_from: str) -> Self:
+    def load(cls, load_from: str):
         """Load the dataset from a csv file"""
         return cls(
             pd.read_csv(
@@ -52,13 +61,16 @@ class SplitDataset(MutableMapping):
 
     @property
     def splits(self) -> dict[str, SATDataset]:
+        """Splits like train, val, test"""
         return self.store
 
     @property
     def split_names(self) -> list[str]:
+        """Thename of the splits"""
         return list(self)
 
     def __getitem__(self, key: str) -> SATDataset:
+        """get split with self[split_name]"""
         return self.store[key]
 
     def __setitem__(self, key: str, value: SATDataset) -> None:
@@ -76,7 +88,7 @@ class SplitDataset(MutableMapping):
     def generator(
         self, splits: list[str] | None = None, **kwargs
     ) -> Generator[SATSample, None, None]:
-        """Yields dataset samples"""
+        """Yields dataset samples from all splits"""
         split_names = splits if splits else self.split_names
         for name in split_names:
             split = self[name]
@@ -85,6 +97,7 @@ class SplitDataset(MutableMapping):
 
     @classmethod
     def load(cls, path: str):
+        """Loads the dataset from a path"""
         path = os.path.expanduser(path)
         return cls(
             **{

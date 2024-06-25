@@ -1,11 +1,24 @@
 """ SAT datatypes"""
 
 from abc import ABCMeta, abstractmethod
-from typing import Iterator, Self
+from typing import Iterator
 
 
 class ParsingException(Exception):
     pass
+
+
+class Tokenizable(metaclass=ABCMeta):
+    """Abstract Class for all DTypes that can be tokenized"""
+
+    @abstractmethod
+    def to_tokens(self) -> list[str]:
+        pass
+
+    @classmethod
+    @abstractmethod
+    def from_tokens(cls, tokens: list[str]) -> 'Tokenizable':
+        pass
 
 
 class CSVDType(metaclass=ABCMeta):
@@ -13,7 +26,7 @@ class CSVDType(metaclass=ABCMeta):
 
     @classmethod
     @abstractmethod
-    def from_fields(cls, **kwargs) -> Self:
+    def from_fields(cls, **kwargs) -> 'CSVDType':
         """Create this DType from a dict based on the CSV file"""
 
     @abstractmethod
@@ -21,7 +34,7 @@ class CSVDType(metaclass=ABCMeta):
         """Create a dict representing this DType for csv writing"""
 
 
-class Literals(metaclass=ABCMeta):
+class Literals(Tokenizable, metaclass=ABCMeta):
     """Abstract class that summarizes a collection of literals."""
 
     def __init__(self, lits: list[int]) -> None:
@@ -37,15 +50,8 @@ class Literals(metaclass=ABCMeta):
         return f"{self.__class__.__name__}({str(self.lits)})"
 
     @classmethod
-    def from_strs(cls, lit_strs: list[str]) -> Self:
-        """create from a list of string literals
-
-        Args:
-            lit_strs (list[str]): the list of string literals
-
-        Raises:
-            ParsingException: if not all literals are ints
-        """
+    def from_strs(cls, lit_strs: list[str]) -> 'Literals':
+        """create from a list of string literals"""
         try:
             lits = [int(lit_str) for lit_str in lit_strs]
         except ValueError as exc:
@@ -65,6 +71,7 @@ class Literals(metaclass=ABCMeta):
         return iter(self.lits)
 
     def __eq__(self, value: object) -> bool:
+        """two Literals classes are equal if they contain the same literals"""
         if isinstance(value, self.__class__):
             return set(self.lits) == set(value.lits)
         return False
@@ -72,35 +79,46 @@ class Literals(metaclass=ABCMeta):
     def __hash__(self) -> int:
         return hash(frozenset(self))
 
+    @property
+    def atoms(self) -> set[int]:
+        """All atoms/variables"""
+        return {abs(lit) for lit in self.lits}
+
     def sort(self) -> None:
         """sort the literals according the abstract value"""
         self.lits.sort(key=abs)
 
-    def polarity(self, literal: int) -> bool:
-        """Get the polarity of a literal
+    def polarity(self, atom: int) -> bool:
+        """Get the polarity of an atom
 
         Raises:
-            ValueError: if the literal does not exist in the set
+            ValueError: if the atom does not exist in the set
         """
-        if literal in [abs(lit) for lit in self.lits if lit < 0]:
+        if atom in [abs(lit) for lit in self.lits if lit < 0]:
             return False
-        if literal in [abs(lit) for lit in self.lits if lit > 0]:
+        if atom in [abs(lit) for lit in self.lits if lit > 0]:
             return True
-        raise ValueError("Literal not defined")
+        raise ValueError("Atom not defined")
 
+    def to_tokens(self) -> list[str]:
+        raise NotImplementedError
+
+    @classmethod
+    def from_tokens(cls, tokens: list[str]) -> 'Literals':
+        raise NotImplementedError
 
 class Clause(Literals):
     """A clause (set of literals)"""
 
     def to_str(self) -> str:
         """return the clause in the DIMACS CNF Format"""
-        return f"{" ".join([str(lit) for lit in self.lits])}{' ' if self.lits else ''}0"
+        return f'{" ".join([str(lit) for lit in self.lits])}{" " if self.lits else ""}0'
 
     def __str__(self) -> str:
         return self.to_str()
 
     @classmethod
-    def from_str(cls, from_str: str) -> Self:
+    def from_str(cls, from_str: str) -> 'Literals':
         """create a clause from a clause in the DIMACS CNF Format"""
         return cls.from_strs(from_str.rstrip("0").rstrip(" ").split(" "))
 
@@ -108,10 +126,12 @@ class Clause(Literals):
 class SATAssignment(Literals, CSVDType):
 
     @classmethod
-    def from_fields(cls, assignment: str, **_) -> Self:
+    def from_fields(cls, assignment: str, **_) -> 'SATAssignment':
+        """load from a csv row"""
         return cls.from_str(from_str=assignment)
 
     def to_fields(self) -> dict[str, str]:
+        """write a csv row"""
         return {"assignment": self.to_str()}
 
     def to_str(self) -> str:
@@ -121,7 +141,7 @@ class SATAssignment(Literals, CSVDType):
         return self.to_str()
 
     @classmethod
-    def from_str(cls, from_str: str) -> Self:
+    def from_str(cls, from_str: str) -> 'SATAssignment':
         """create an assignment from a DIMACS Assignment str"""
         assignment = []
         read_zero = False
@@ -139,8 +159,15 @@ class SATAssignment(Literals, CSVDType):
             return cls.from_strs(assignment)
         raise ParsingException("Assignment string does not end with zero")
 
+    def to_tokens(self) -> list[str]:
+        raise NotImplementedError
 
-class CNFFormula(CSVDType):
+    @classmethod
+    def from_tokens(cls, tokens: list[str]) -> 'SATAssignment':
+        raise NotImplementedError
+
+
+class CNFFormula(Tokenizable, CSVDType):
     def __init__(
         self, clauses: list[Clause], comments: list[str] | None = None
     ) -> None:
@@ -149,10 +176,12 @@ class CNFFormula(CSVDType):
         self.comments = comments if comments is not None else []
 
     @classmethod
-    def from_fields(cls, formula: str, **_) -> Self:
+    def from_fields(cls, formula: str, **_) -> 'CNFFormula':
+        """create from csv row"""
         return cls.from_str(formula)
 
     def to_fields(self) -> dict[str, str]:
+        """write a csv row"""
         return {"formula": self.to_str()}
 
     def __iter__(self) -> Iterator[Clause]:
@@ -171,7 +200,7 @@ class CNFFormula(CSVDType):
         )
 
     @classmethod
-    def from_str(cls, from_str: str) -> Self:
+    def from_str(cls, from_str: str) -> 'CNFFormula':
         """Create CNFFormula from a string in DIMACS CNF format"""
         nbvars = -1
         nbclauses = -1
@@ -218,21 +247,35 @@ class CNFFormula(CSVDType):
         return self.to_str()
 
     def __repr__(self) -> str:
-        clauses = f"[{", ".join([c.__repr__() for c in self.clauses])}]"
-        return f"{self.__class__.__name__}({clauses},{str(self.comments)})"
+        clauses = f'[{", ".join([c.__repr__() for c in self.clauses])}]'
+        return f'{self.__class__.__name__}({clauses},{str(self.comments)})'
+
+    def to_tokens(self) -> list[str]:
+        raise NotImplementedError
+
+    @classmethod
+    def from_tokens(cls, tokens: list[str]) -> 'CNFFormula':
+        raise NotImplementedError
 
     def __eq__(self, value: object) -> bool:
         if isinstance(value, self.__class__):
             return set(self.clauses) == set(value.clauses)
         return False
 
+    @property
+    def atoms(self) -> set[int]:
+        """get all atoms of this formula"""
+        return {a for clause in self.clauses for a in clause.atoms}
+
 
 class SATSample(CSVDType):
-    """combination of a SAT Problem (i.e. CNF formula) and SAT solution (i.e. assignment)"""
+    """combination of a SAT Problem (i.e. CNF formula) and SAT solution (i.e. assignment, prediction)"""
 
-    def __init__(self, formula: CNFFormula, assignment: SATAssignment) -> None:
+    def __init__(self, formula: CNFFormula, target_assignment: None | SATAssignment = None, prediction_assignment: None | SATAssignment= None) -> None:
+        """initialize with formula (mandatory) and target (for supervised samples) and prediction (if exists)"""
         self.formula = formula
-        self.assignment = assignment
+        self.target_assignment = target_assignment
+        self.prediction_assignment = prediction_assignment
 
     @property
     def input(self) -> CNFFormula:
@@ -240,17 +283,38 @@ class SATSample(CSVDType):
 
     @property
     def target(self) -> SATAssignment:
-        return self.assignment
+        assert self.target_assignment is not None
+        return self.target_assignment
+
+    @property
+    def prediction(self) -> SATAssignment:
+        assert self.prediction_assignment is not None
+        return self.prediction_assignment
 
     @classmethod
-    def from_fields(cls, **kwargs) -> Self:
+    def from_fields(cls, **kwargs) -> 'SATSample':
+        """create from a csv row"""
         return cls(
             formula=CNFFormula.from_fields(**kwargs),
-            assignment=SATAssignment.from_fields(**kwargs)
+            target_assignment=SATAssignment.from_fields(**kwargs)
         )
 
     def to_fields(self) -> dict[str, str]:
-        return {**self.formula.to_fields(), **self.assignment.to_fields()}
+        """convert to a csv row"""
+        return {**self.formula.to_fields(), **(self.target_assignment.to_fields() if self.target_assignment is not None else {})}
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.formula.__repr__(), self.assignment.__repr__()})"
+        return f"{self.__class__.__name__}({self.formula.__repr__(), self.target_assignment.__repr__()})"
+
+
+    def equal(self) -> bool:
+        """true if the prediction and the target are the same assignment"""
+        raise NotImplementedError
+
+    def equal_tk(self) -> bool:
+        """true if the prediction and target have the same tokenization (i.e. same order of literals)"""
+        raise NotImplementedError
+
+    def correct(self) -> bool:
+        """true if the assignment satisfies the formula"""
+        raise NotImplementedError
